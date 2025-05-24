@@ -1,0 +1,154 @@
+#! /usr/bin/env python3
+
+import sys, os
+import numpy
+
+sys.path.append('../scripts')
+
+import bgeo
+import sdbio
+
+every = 1
+stepmax = 9999999
+rscale = 1
+orbs = []
+sdbout = None
+outstem = None
+
+def Usage():
+    print(f"""Usage: {sys.argv[0]}  [-e everyNth] [-orbs id0,id1,...] [-o out.bgeo] nemofile""")
+    sys.exit(1)
+
+ii = 1
+while ii<len(sys.argv) and sys.argv[ii][0] == '-':
+    opt = sys.argv[ii]; ii += 1
+    if opt == '-e':
+        every = int( sys.argv[ii] ); ii += 1
+    elif opt == '-rscale':
+        rscale = float( sys.argv[ii] ); ii += 1
+    elif opt.startswith('-orb'):
+        ss = sys.argv[ii].replace(',',' ').split(); ii += 1
+        orbs.extend( [ int(s) for s in ss ] ) 
+    elif opt == '-o':
+        outstem = sys.argv[ii]; ii += 1
+    elif opt == '-sdbdump':
+        sdbout = sys.argv[ii]; ii += 1
+    elif opt == '-stepmax':
+        stepmax = int( sys.argv[ii] ); ii += 1
+    else:
+        print("Unknown option: ", opt)
+        Usage()
+
+if len(sys.argv) != ii+1:
+    Usage()
+
+nemoin = sys.argv[ii]
+
+cmd = f"snapprint in='{nemoin}' options=x,y,z,i header=t"
+
+cmdf = os.popen(cmd, 'r')
+
+rr = []
+ptss = []
+
+stepno = 0
+while stepno <= stepmax:
+    line = cmdf.readline()
+    if line == '':
+        break
+
+    ss = line.split()
+    if len(ss) != 2:
+        raise ValueError("Expected <nbodies> <timeval> -- what's " + line)
+    nbodies, time = int(ss[0]), float(ss[1])
+
+    pts = numpy.empty( (nbodies, 3+1) )
+    for i in range(nbodies):
+        line = cmdf.readline()
+        ss = line.split()
+        pts[i] = [float(s) for s in ss]
+
+    if every > 1:
+        pts = pts[::every]
+        onbodies = len(pts)
+    else:
+        onbodies = nbodies
+
+    r = numpy.sqrt( numpy.sum( numpy.square(pts[:,0:3]), axis=1 ) )
+    ptss.append( pts[:,0:3] )
+    ixx = pts[:, 3]
+
+    rr.append( r )
+
+    stepno += 1
+
+nsteps = stepno
+
+ptss = numpy.array( ptss )
+rr = numpy.array( rr )
+
+if sdbout is not None:
+    sdbw = sdbio.SDBWriter( sdbout )
+    timerange = numpy.arange( ptss.shape[0] )
+    for seqno in orbs: ## range( ptss.shape[1] ):
+        sdbw.writepcles( ptss[:,seqno], num=seqno, opacity=timerange )
+    sdbw.close()
+
+rrmins = []
+rrmaxs = []
+
+rae = {}
+
+if outstem is None:
+    for i in range(onbodies):
+        rbodyi = rr[:, i]
+        imins = 1 + numpy.argwhere( (rbodyi[:-2] > rbodyi[1:-1]) & (rbodyi[1:-1] < rbodyi[2:]) )[:,0]
+        imaxs = 1 + numpy.argwhere( (rbodyi[:-2] < rbodyi[1:-1]) & (rbodyi[1:-1] > rbodyi[2:]) )[:,0]
+
+        if len(imins) >= 2 and len(imaxs) >= 2:
+            typrmin = rbodyi[imins].mean()
+            typrmax = rbodyi[imaxs].mean()
+            a = 0.5*(typrmax + typrmin)
+            e = 0.5*(typrmax - typrmin) / a
+            rae[i] = dict(isim=ixx[i], a=a, e=e, rmin=rbodyi.min(), rmax=rbodyi.max(), n=len(imins))
+
+    print("# seq  isim     e             a         rmin     rmax   n")
+    for i in sorted( rae.keys(), key=lambda i: rae[i]['e'], reverse=True ):
+        rd = rae[i]
+        print("%5d %5d %10.6f   %10g   %7.4f  %7.4f  %d" % (i, rd['isim'], rd['e'], rd['a'], rd['rmin'], rd['rmax'], rd['n']))
+
+if outstem is not None:
+    if outstem.endswith('/'):
+        outstem += os.path.basename( os.path.dirname(outstem) )
+
+    pointattrnames = [ "seqno", "special", "rmin", "rmax", "a", "ecc" ]
+    pointattrs = numpy.empty( (onbodies, len(pointattrnames)) )
+    pointattrs[:,0] = numpy.arange(onbodies)  # attr0: point index in simulation
+    pointattrs[:,1] = 0         # attr1: 0=ordinary point (not a special orbit)
+    pointattrs[ orbs, 1 ] = 1   #        1=special point (whose orbit is traced)
+    rmin = rr.min( axis=0 )
+    rmax = rr.max( axis=0 )
+    a    = 0.5 * (rmax + rmin) # rough semimajor axis
+    e    = 0.5 * (rmax - rmin) / a
+    pointattrs[:,2] = rmin
+    pointattrs[:,3] = rmax
+    pointattrs[:,4] = a
+    pointattrs[:,5] = e
+
+    for stepno in range(nsteps):
+        outfname = outstem + ".%04d.bgeo" % stepno
+
+        _ = bgeo.BGeoPolyWriter( outfname, points=ptss[stepno], pointattrnames=pointattrnames, pointattrs=pointattrs )
+
+
+    outfname = outstem + ".orbits.bgeo"
+
+    polys = [ ptss[:,i] for i in orbs ]
+    polyattrnames = pointattrnames
+    polyattrs = pointattrs[orbs]
+
+    print(f"poly0: [{len(polys[0])}] dxs {[polys[0][1:,0]-polys[0][:-1,0]]}")
+    # print("Writing %d curves, %d vertices to %s" % (len(polys), sum([len(pv) for pv in polys]), outfname))
+    _ = bgeo.BGeoPolyWriter( outfname, polyattrnames=polyattrnames, polyattrs=polyattrs, as_curves=dict(degree=1,closed=False), polyverts=polys )
+
+

@@ -1,0 +1,34 @@
+survey-redcores.py > redcores.dat ; # writes redcores.dat: starno starid n_peri_times  ecc  mindist  maxdist
+
+sort -k +4n redcores.dat  > redcores.sorted.dat  ;# ordered by eccentricity
+
+grep -v '^#' /i0/src/ghez/3D_orbits_movie_20230531.dat| awk '$5>0 { print $3*(1-$5), $5, $1 }'|sort -n  ;# Ghez stars ordered by eccentricity.
+
+
+#### using NEMO
+
+source ~/src/nemo/nemo_start.sh
+
+gyrfalcON in=/tmp/m100.dat step=1 tstop=20 out=- logfile=/tmp/glog kmax=6 eps=0.1 | addgravity in=- out=- | snapprint in=-
+ header=t options=x,y,z,key,vx,vy,vz,m,phi,etot
+
+mkplummer - 100 massname='n(m)' massexpr='pow(m,p)' masspars=p,-1.5 massrange=.01,1 | \
+    gyrfalcON in=- step=1 tstop=20 out=- logfile=/tmp/glog kmax=6 eps=0.1 give=mxva | \
+    addprop in=- out=- add=key value=i | \
+    addgravity in=- out=- | \
+    snapprint in=- header=t options=x,y,z,key,vx,vy,vz,m,phi,etot,speed,acc
+
+
+snap2sdb.py -rscale 80 -e 2800 -bgeo nemotoy/cotton.snp ../data/cluster/bowl/bowl11
+# wrote 11 points, rmax 205.55 rmean 70.0262 stddev 52.909 mass 0.101137 .. 4.65714 mean 0.977154 to ../data/cluster/bowl/bowl11.0000.bgeo
+
+snap2sdb.py -rscale 80 -e 600 -bgeo nemotoy/cotton.snp ../data/cluster/bowl/bowl50
+# wrote 50 points, rmax 205.55 rmean 69.6738 stddev 47.4136 mass 0.101137 .. 9.55623 mean 1.1293 to ../data/cluster/bowl/bowl50.0000.bgeo
+
+snap2sdb.py -rscale 80 -bgeo nemotoy/cotton.snp ../data/cluster/bowl/bowl
+# wrote 30000 points, rmax 1801.78 rmean 90.5555 stddev 108.411 mass 0.0998877 .. 9.98757 mean 1 to ../data/cluster/bowl/bowl.0000.bgeo
+
+survey-snap.py nemotoy/wool.snp > ../data/cluster/bowl/bowlstars.dat
+# Then pick out three stars, near the 99th, 90th and 50th centiles.  Show their orbits as curves:
+survey-snap.py  -orbs 11382,15624,21295 -o ../data/cluster/bowl/bowlstars  nemotoy/wool.snp
+

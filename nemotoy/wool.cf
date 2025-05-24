@@ -1,0 +1,5 @@
+#! /usr/bin/env partiview
+
+sdbvars mcr
+
+read wool/wool.speck
