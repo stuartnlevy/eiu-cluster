@@ -44,7 +44,7 @@ if len(sys.argv) != ii+1:
 
 nemoin = sys.argv[ii]
 
-cmd = f"snapprint in='{nemoin}' options=x,y,z,i header=t"
+cmd = f"snapprint in='{nemoin}' options=x,y,z,i,m header=t"
 
 cmdf = os.popen(cmd, 'r')
 
@@ -62,7 +62,7 @@ while stepno <= stepmax:
         raise ValueError("Expected <nbodies> <timeval> -- what's " + line)
     nbodies, time = int(ss[0]), float(ss[1])
 
-    pts = numpy.empty( (nbodies, 3+1) )
+    pts = numpy.empty( (nbodies, 3+2) )
     for i in range(nbodies):
         line = cmdf.readline()
         ss = line.split()
@@ -75,7 +75,7 @@ while stepno <= stepmax:
         onbodies = nbodies
 
     r = numpy.sqrt( numpy.sum( numpy.square(pts[:,0:3]), axis=1 ) )
-    ptss.append( pts[:,0:3] )
+    ptss.append( pts[:,0:5] )
     ixx = pts[:, 3]
 
     rr.append( r )
@@ -87,11 +87,20 @@ nsteps = stepno
 ptss = numpy.array( ptss )
 rr = numpy.array( rr )
 
+if True:
+    nbodies = len(ptss)
+    mass = ptss[0,:,4] * nbodies
+    minmass = mass[mass>0].min()
+    mass = numpy.where(mass>0, mass, minmass)   # replace any NaNs, 0, etc. with minimum positive mass
+    lum = mass ** 2.5
+    mag = -0.921 * numpy.log(lum)
+
 if sdbout is not None:
     sdbw = sdbio.SDBWriter( sdbout )
     timerange = numpy.arange( ptss.shape[0] )
+    
     for seqno in orbs: ## range( ptss.shape[1] ):
-        sdbw.writepcles( ptss[:,seqno], num=seqno, opacity=timerange )
+        sdbw.writepcles( ptss[:,seqno,0:3], num=seqno, radius=mass, mag=mag, opacity=timerange )
     sdbw.close()
 
 rrmins = []
@@ -121,7 +130,7 @@ if outstem is not None:
     if outstem.endswith('/'):
         outstem += os.path.basename( os.path.dirname(outstem) )
 
-    pointattrnames = [ "seqno", "special", "rmin", "rmax", "a", "ecc" ]
+    pointattrnames = [ "seqno", "special", "rmin", "rmax", "a", "ecc", "mass", "bigness" ]
     pointattrs = numpy.empty( (onbodies, len(pointattrnames)) )
     pointattrs[:,0] = numpy.arange(onbodies)  # attr0: point index in simulation
     pointattrs[:,1] = 0         # attr1: 0=ordinary point (not a special orbit)
@@ -134,21 +143,27 @@ if outstem is not None:
     pointattrs[:,3] = rmax
     pointattrs[:,4] = a
     pointattrs[:,5] = e
+    pointattrs[:,6] = mass                  # "mass"
+    pointattrs[:,7] = (mass ** 0.5) * 0.005 # "bigness".   0.005 is a magic number, convenient for spacing of stars in "wool" cluster.
 
     for stepno in range(nsteps):
         outfname = outstem + ".%04d.bgeo" % stepno
 
-        _ = bgeo.BGeoPolyWriter( outfname, points=ptss[stepno], pointattrnames=pointattrnames, pointattrs=pointattrs )
+        _ = bgeo.BGeoPolyWriter( outfname, points=ptss[stepno,:,0:3], pointattrnames=pointattrnames, pointattrs=pointattrs )
 
 
     outfname = outstem + ".orbits.bgeo"
 
-    polys = [ ptss[:,i] for i in orbs ]
+    #polys = [ ptss[:,i] for i in orbs ]
+    polys = [ ptss[:,i,0:3] for i in orbs ]
     polyattrnames = pointattrnames
     polyattrs = pointattrs[orbs]
 
+    pointattrnames = ["orbframe"]
+    pointattrs = numpy.concatenate( [ numpy.arange(nsteps) for i in orbs ] ).reshape(-1,1)
+
     print(f"poly0: [{len(polys[0])}] dxs {[polys[0][1:,0]-polys[0][:-1,0]]}")
     # print("Writing %d curves, %d vertices to %s" % (len(polys), sum([len(pv) for pv in polys]), outfname))
-    _ = bgeo.BGeoPolyWriter( outfname, polyattrnames=polyattrnames, polyattrs=polyattrs, as_curves=dict(degree=1,closed=False), polyverts=polys )
+    _ = bgeo.BGeoPolyWriter( outfname, polyattrnames=polyattrnames, polyattrs=polyattrs, as_curves=dict(degree=1,closed=False), polyverts=polys, pointattrnames=pointattrnames, pointattrs=pointattrs )
 
 
