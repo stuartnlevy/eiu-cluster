@@ -2,6 +2,9 @@
 
 import sys, os
 import numpy
+import time
+
+sys.path.append('../scripts')
 
 import sdbio
 
@@ -48,28 +51,50 @@ cmd = f"snapprint in='{nemoin}' options=x,y,z,key,m,vx,vy,vz header=t"
 
 cmdf = os.popen(cmd, 'r')
 
-stepno = 0
-while True:
-    line = cmdf.readline()
-    if line == '':
-        break
+class NemoSnapReader:
 
-    ss = line.split()
-    if len(ss) != 2:
-        raise ValueError("Expected <nbodies> <timeval> -- what's " + line)
-    nbodies, time = int(ss[0]), float(ss[1])
+    def __init__(self, snapfile, tempdir='/dev/shm'):
+        self.snapfile = snapfile
+        self.timelist = None
+        self.tempdir = tempdir
 
-    pts = numpy.empty( (nbodies, 3+1+4) )
-    for i in range(nbodies):
-        line = cmdf.readline()
-        ss = line.split()
-        pts[i] = [float(s) for s in ss]
+    def times(self):
+        if self.timelist is None:
+            self.timelist = []
+            with os.popen(f"snapmask in={nemoin} select=1 out=- | snapprint in=- header=t", "r") as indexf:
+                while True:
+                    ss = indexf.readline().split() # nstars timestep
+                    if len(ss) != 2:
+                        break
+                    self.timelist.append( float(ss[1]) )
+                    indexf.readline() # ignore the single star data selected by select=1
+            self.timelist = numpy.array( self.timelist )
+        return self.timelist
+
+    fieldnames = "x,y,z,key,m,vx,vy,vz"
+
+    def readtime(self, t, dtype=float):
+        nfields = len( self.fieldnames.split(',') )
+        with os.popen(f"snapprint in={nemoin} times={t} header=f options={self.fieldnames} 2>/dev/null") as brickf:
+            brick = numpy.loadtxt(brickf).reshape( -1, nfields )
+        return brick
+
+
+nemor = NemoSnapReader( nemoin )
+t0 = time.time()
+times = nemor.times()
+t1 = time.time()
+print(f"# Found {len(times)} times in {(t1-t0)*1000:.0f} ms")
+
+tprev = t1
+for stepno, ttime in enumerate(times):
+
+    pts = nemor.readtime(ttime)
 
     if every > 1:
         pts = pts[::every]
-        onbodies = len(pts)
-    else:
-        onbodies = nbodies
+
+    nbodies = len(pts)
 
     outname = outstem + (".%04d.%s" % (stepno, as_type))
     mass = pts[:,4] * nbodies
@@ -94,7 +119,10 @@ while True:
             print(f"wrote {len(pts)} points, rmax {r.max():g} rmean {r.mean():g} stddev {r.std():g} mass {mass.min():g} .. {mass.max():g} mean {mass.mean():g} to {outname}")
 
     if stepno % 10 == 0:
-        print("%04d " % stepno, end="", flush=True)
+        t2 = time.time()
+        print("%04d " % (stepno), end="", flush=True)
+        ##print("%04d(%dms) " % (stepno, (t2-t1)*1000/10), end="", flush=True)
+        t1 = t2
 
     stepno += 1
 
