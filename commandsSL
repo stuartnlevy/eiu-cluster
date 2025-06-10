@@ -32,3 +32,63 @@ survey-snap.py nemotoy/wool.snp > ../data/cluster/bowl/bowlstars.dat
 # Then pick out three stars, near the 99th, 90th and 50th centiles.  Show their orbits as curves:
 survey-snap.py  -orbs 11382,15624,21295 -o ../data/cluster/bowl/bowlstars  nemotoy/wool.snp
 
+
+snaptrim in=nemotoy/morewool.snp out=/tmp/morewoollast.snp times=last
+
+#### nemo-make-wool.sh
+mkdir -p nemotoy
+
+rm -f nemotoy/cotton.snp nemotoy/wool.snp
+
+mkplummer out=nemotoy/cotton.snp seed=1745450495 nbody=30000 massname='n(m)' massexpr='pow(m,p)' masspars=p,-1.5 massrange=.01,1
+/usr/bin/time gyrfalcON in=nemotoy/cotton.snp step=0.0625 tstop=30 out=- logfile=nemotoy/glog kmax=6 eps=0.1 give=mxva | addprop in=- out=- add=key value=i | addgravity in=- out=nemotoy/wool.snp
+
+rm -f nemotoy/woolext1.snp
+snaptrim in=nemotoy/wool.snp times=30 out=- | gyrfalcON in=- out=- startout=f step=0.0625 tstop=45 logfile=nemotoy/glogext kmax=6 eps=0.1 give=mxva | addgravity in=- out=nemotoy/woolext1.snp
+
+rm -f nemotoy/woolextc.snp
+snaptrim in=nemotoy/woolext1.snp times=45 checkall=true out=- | snapbench in=- iter=1 mass='0.01*m' out=nemotoy/woolextc.snp
+
+rm -f nemotoy/justbh.snp
+mksphere nbody=1 radii=0:1:1 density=1 out=nemotoy/justbh.snp
+
+rm -f nemotoy/woolext+bh.snp
+gyrfalcON in=nemotoy/woolext+bh0.snp out=- startout=f step=0.0625 tstop=90 logfile=nemotoy/glogbh kmax=6 eps=0.1 give=mxva | addprop in=- out=- add=key value=i | addgravity in=- out=nemotoy/woolbh.snp
+
+snapmass in=nemotoy/woolext+bh0.snp mass='(i==30000)?0.1:m*1e28' out=-
+##snapmask 
+
+BHramp=nemotoy/grow
+mkdir -p nemotoy/grow
+rm -f nemotoy/grow/BHramp.*.snp
+Ngrowsteps=48
+FullBHMass=1.0
+snapstack in1=nemotoy/woolext001.snp in2=nemotoy/justbh.snp out=- | snapmass in=- mass='(i==30000) ? 0 : m' out=$BHramp/seed.snp
+prev=$BHramp/seed.snp
+for e in `seq 0 $Ngrowsteps`; do
+    outname=`printf $BHramp/BHramp.%04d.snp $e`
+    gyrfalcON in=
+    snapmass in=$prev mass='(i==30000)? $e*$FullBHMass/$Ngrowsteps : m' out=- | \
+        gyrfalcON in=- startout=f step=0.0625 tstop=... out=$outname 
+
+cat nemotoy/grow/BHramp.????.snp | survey-snap.py - > /tmp/bhramp.dat
+snaptrim in=nemotoy/woolbh.snp times=46 out=- |snapmask in=- out=- select=11382,15624,21295 
+
+makebhramp.py ; # produces nemotoy/grow/
+# Add some more sim time, though maybe unneeded
+rm -f nemotoy/grow/BHramp.moxr.snp; snaptrim in=nemotoy/grow/BHramp.more.snp times=53 out=- | gyrfalcON in=- startout=f step=0.0625 tstop=68 logfile=nemotoy/grow/glogmoor kmax=6 eps=0.1 give=mxvap out=nemotoy/grow/BHramp.moxr.snp
+# Gather all the nemotoy/grow/BHramp.????.snp's together in lex order
+makegatherbh.py
+# Produced nemotoy/grow/bhall.snp
+
+survey-snap.py -heart -1 nemotoy/grow/bhall.snp  > nemotoy/grow/bhall.dat
+
+survey-snap.py -heart -1 -o ../data/cluster/bowl/bhall  -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/grow/bhall.snp 
+
+cp nemotoy/wool.snp nemotoy/wool+ext.snp
+snapmerge_a_dp in1=nemotoy/wool+ext.snp in2=nemotoy/woolext1.snp
+
+survey-snap.py -sdbdump ../data/cluster/bowl/wool+ext.sdb -o ../data/cluster/bowl/wool+ext -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/wool+ext.snp > ../data/cluster/bowl/wool+ext.log 2>&1
+
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhall.sdb -o ../data/cluster/bowl/bhall -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhall.log 2>&1&
+
