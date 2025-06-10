@@ -147,7 +147,8 @@ if outstem is not None:
     pointattrs = numpy.empty( (onbodies, len(pointattrnames)) )
     pointattrs[:,0] = numpy.arange(onbodies)  # attr0: point index in simulation
     pointattrs[:,1] = 0         # attr1: 0=ordinary point (not a special orbit)
-    pointattrs[ orbs, 1 ] = 1   #        1=special point (whose orbit is traced)
+    for seqno, orb in enumerate(orbs):
+        pointattrs[ orb, 1 ] = seqno+1   #   >0 = special point (whose orbit is traced)
     rmin = rr.min( axis=0 )
     rmax = rr.max( axis=0 )
     a    = 0.5 * (rmax + rmin) # rough semimajor axis
