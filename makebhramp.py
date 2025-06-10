@@ -4,9 +4,9 @@ import sys, os
 import numpy
 
 Ngrowsteps=48
-FullBHMass=1.0
+FullBHMass=2.5
 growdt = 0.0625
-runmoretime = 5
+runmoretime = 42
 
 BHramp = "nemotoy/grow"
 BHfmt = f"{BHramp}/BHramp.%04d.snp"
