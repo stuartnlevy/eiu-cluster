@@ -14,13 +14,14 @@ rscale = 1
 orbs = []
 sdbout = None
 outstem = None
+heartid = None
 
 def Usage():
-    print(f"""Usage: {sys.argv[0]}  [-e everyNth] [-orbs id0,id1,...] [-o out.bgeo] nemofile""")
+    print(f"""Usage: {sys.argv[0]}  [-e everyNth] [-orbs id0,id1,...] [-trackbh] [-o out.bgeo] nemofile""")
     sys.exit(1)
 
 ii = 1
-while ii<len(sys.argv) and sys.argv[ii][0] == '-':
+while ii<len(sys.argv) and sys.argv[ii][0] == '-' and len(sys.argv[ii]) > 1:
     opt = sys.argv[ii]; ii += 1
     if opt == '-e':
         every = int( sys.argv[ii] ); ii += 1
@@ -35,6 +36,10 @@ while ii<len(sys.argv) and sys.argv[ii][0] == '-':
         sdbout = sys.argv[ii]; ii += 1
     elif opt == '-stepmax':
         stepmax = int( sys.argv[ii] ); ii += 1
+    elif opt == '-trackbh':
+        heartid = -1        # Doing -trackbh this way assumes that the black hole is the LAST particle in the source.  If it were the first, we'd set heartid = 0
+    elif opt == '-heart':
+        heartid = int( sys.argv[ii] ); ii += 1
     else:
         print("Unknown option: ", opt)
         Usage()
@@ -50,6 +55,7 @@ cmdf = os.popen(cmd, 'r')
 
 rr = []
 ptss = []
+time = -1 # dummy
 
 stepno = 0
 while stepno <= stepmax:
@@ -61,18 +67,23 @@ while stepno <= stepmax:
     if len(ss) != 2:
         raise ValueError("Expected <nbodies> <timeval> -- what's " + line)
     nbodies, time = int(ss[0]), float(ss[1])
-
+    #print(f"# {nbodies=} {time=}", end="", flush=True)
     pts = numpy.empty( (nbodies, 3+2) )
     for i in range(nbodies):
         line = cmdf.readline()
         ss = line.split()
         pts[i] = [float(s) for s in ss]
+    #print("")
+    
+    if heartid is not None:     # re-center to location of -heart <N>'th particle (e.g. -heart -1 if black hole is appended).  Otherwise assumes center is at (0,0,0).
+        pts[:, 0:3] -= pts[heartid, 0:3]
 
     if every > 1:
         pts = pts[::every]
         onbodies = len(pts)
     else:
         onbodies = nbodies
+    #print(f"# {onbodies=}")
 
     r = numpy.sqrt( numpy.sum( numpy.square(pts[:,0:3]), axis=1 ) )
     ptss.append( pts[:,0:5] )
@@ -83,6 +94,8 @@ while stepno <= stepmax:
     stepno += 1
 
 nsteps = stepno
+
+print(f"# got {nsteps} timesteps ending at {time=:g}")
 
 ptss = numpy.array( ptss )
 rr = numpy.array( rr )
@@ -100,7 +113,7 @@ if sdbout is not None:
     timerange = numpy.arange( ptss.shape[0] )
     
     for seqno in orbs: ## range( ptss.shape[1] ):
-        sdbw.writepcles( ptss[:,seqno,0:3], num=seqno, radius=mass, mag=mag, opacity=timerange )
+        sdbw.writepcles( ptss[:,seqno,0:3], num=seqno, radius=mass[seqno], mag=mag[seqno], opacity=timerange )
     sdbw.close()
 
 rrmins = []
@@ -162,8 +175,6 @@ if outstem is not None:
     pointattrnames = ["orbframe"]
     pointattrs = numpy.concatenate( [ numpy.arange(nsteps) for i in orbs ] ).reshape(-1,1)
 
-    print(f"poly0: [{len(polys[0])}] dxs {[polys[0][1:,0]-polys[0][:-1,0]]}")
+    ## print(f"poly0: [{len(polys[0])}] dxs {[polys[0][1:,0]-polys[0][:-1,0]]}")
     # print("Writing %d curves, %d vertices to %s" % (len(polys), sum([len(pv) for pv in polys]), outfname))
     _ = bgeo.BGeoPolyWriter( outfname, polyattrnames=polyattrnames, polyattrs=polyattrs, as_curves=dict(degree=1,closed=False), polyverts=polys, pointattrnames=pointattrnames, pointattrs=pointattrs )
-
-
