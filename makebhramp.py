@@ -4,9 +4,10 @@ import sys, os
 import numpy
 
 Ngrowsteps=48
-FullBHMass=2.5
+FullBHMass=20
 growdt = 0.0625
-runmoretime = 42
+#runmoretime = 42
+runmoretime = 5
 
 BHramp = "nemotoy/grow"
 BHfmt = f"{BHramp}/BHramp.%04d.snp"
@@ -38,7 +39,8 @@ prevtime = seedtime
 for rampstep in range(Ngrowsteps):
     outname = BHfmt % rampstep
     seedtime = seedtime + growdt
-    os.system(f"snapmass in={prev} mass='(i=={nstars})? {rampstep*FullBHMass/Ngrowsteps} : m' out=- | gyrfalcON in=- startout=f step={growdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.1 give=mxvap out={outname}")
+    massnow = rampstep*FullBHMass/Ngrowsteps
+    os.system(f"snapcenter in={prev} weight='i=={nstars}?1:0' out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={massnow+1} out=- | gyrfalcON in=- startout=f step={growdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
 
     prev = outname
     prevtime = seedtime
