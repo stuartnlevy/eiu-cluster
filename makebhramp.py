@@ -36,7 +36,7 @@ if nstars is None or seedtime is None:
     raise ValueError(f"Couldn't detect number of stars and timestep in {seedinput[0]} with tsf ...")
 
 seed = f"{BHramp}/BHramp.sd.snp"
-os.system(f"snapstack zerocm=t in1={seedinput[0]} in2={seedinput[1]} out=- | snapmass in=- mass='(i=={nstars}) ? 0 : m' out={seed}")
+os.system(f"snapstack zerocm=f in1={seedinput[0]} in2={seedinput[1]} out=- | snapmass in=- mass='(i=={nstars}) ? 0 : m' out={seed}")
  
 prev = seed
 prevtime = seedtime
@@ -47,7 +47,7 @@ for rampstep in range(Ngrowsteps):
     normmass = 1
     ##os.system(f"snapcenter in={prev} weight='i=={nstars}?1:0' out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={massnow+1} out=- | gyrfalcON in=- startout=f step={growdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
     print(f"# {massnow=:g} {normmass=:g}")
-    ok = os.system(f"snapcenter in={prev} times={prevtime} weight='(i=={nstars})?2*m:m' out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={normmass} out=- | gyrfalcON in=- startout=f step={stepdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
+    ok = os.system(f"snapcenter in={prev} times={prevtime} weight='(i<{nstars})' out=- | snapmask in=- select=0:{nstars-1} out=- | snapstack zerocm=f in1=- in2={seedinput[1]} out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={normmass} out=- | gyrfalcON in=- startout=f step={stepdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
     if ok != 0:
         print("# Exiting early at step", rampstep, "of", Ngrowsteps)
         sys.exit(1)
