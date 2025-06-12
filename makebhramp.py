@@ -4,15 +4,16 @@ import sys, os
 import numpy
 
 Ngrowsteps=48
-FullBHMass=20
-growdt = 0.0625
+FullBHMass=1.5
+stepdt = 0.0625
+growdt = 0.25   # should be a whole multiple of stepdt
 #runmoretime = 42
-runmoretime = 5
+runmoretime = 4
 
 BHramp = "nemotoy/grow"
 BHfmt = f"{BHramp}/BHramp.%04d.snp"
 
-seedinput = [ "nemotoy/woolext001.snp", "nemotoy/justbh.snp" ]
+seedinput = [ "nemotoy/wool+ext-end.snp", "nemotoy/justbh.snp" ]
 ####
 
 if not os.path.isdir(BHramp):
@@ -24,9 +25,12 @@ with os.popen(f"tsf {seedinput[0]}", "r") as tsff:
     for line in tsff.readlines():
         if 'int Nobj' in line:
             nstars = int( line.split()[2] )
+            if seedtime is not None:
+                break
         if 'double Time' in line:
             seedtime = float( line.split()[2] )
-            break
+            if nstars is not None:
+                break
 
 if nstars is None or seedtime is None:
     raise ValueError(f"Couldn't detect number of stars and timestep in {seedinput[0]} with tsf ...")
@@ -39,12 +43,18 @@ prevtime = seedtime
 for rampstep in range(Ngrowsteps):
     outname = BHfmt % rampstep
     seedtime = seedtime + growdt
-    massnow = rampstep*FullBHMass/Ngrowsteps
-    os.system(f"snapcenter in={prev} weight='i=={nstars}?1:0' out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={massnow+1} out=- | gyrfalcON in=- startout=f step={growdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
+    massnow = FullBHMass*(rampstep/Ngrowsteps)**2  # ramp up more gradually to final BH mass
+    normmass = 1
+    ##os.system(f"snapcenter in={prev} weight='i=={nstars}?1:0' out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={massnow+1} out=- | gyrfalcON in=- startout=f step={growdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
+    print(f"# {massnow=:g} {normmass=:g}")
+    ok = os.system(f"snapcenter in={prev} times={prevtime} weight='(i=={nstars})?2*m:m' out=- | snapmass in=- mass='(i=={nstars})? {massnow} : m' norm={normmass} out=- | gyrfalcON in=- startout=f step={stepdt} tstop={seedtime} logfile={BHramp}/glog{rampstep:04d} kmax=6 eps=0.01 give=mxvap out={outname}")
+    if ok != 0:
+        print("# Exiting early at step", rampstep, "of", Ngrowsteps)
+        sys.exit(1)
 
     prev = outname
     prevtime = seedtime
 
 
 outname = f"{BHramp}/BHramp.more.snp"
-os.system(f"gyrfalcON in={prev} startout=f step={growdt} tstop={prevtime+runmoretime} logfile={BHramp}/glogmore kmax=6 eps=0.1 give=mxvap out={outname}")
+os.system(f"snapcenter in={prev} times={prevtime} weight='(i=={nstars})?2*m:m' out=- |gyrfalcON in=- startout=f step={stepdt} tstop={prevtime+runmoretime} logfile={BHramp}/glogmore kmax=6 eps=0.01 give=mxvap out={outname}")
