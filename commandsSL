@@ -88,7 +88,44 @@ survey-snap.py -heart -1 -o ../data/cluster/bowl/bhall  -orbs 11382,15624,21295,
 cp nemotoy/wool.snp nemotoy/wool+ext.snp
 snapmerge_a_dp in1=nemotoy/wool+ext.snp in2=nemotoy/woolext1.snp
 
-survey-snap.py -sdbdump ../data/cluster/bowl/wool+ext.sdb -o ../data/cluster/bowl/wool+ext -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/wool+ext.snp > ../data/cluster/bowl/wool+ext.log 2>&1
+/usr/bin/time survey-snap.py -sdbdump ../data/cluster/bowl/juststars.sdb -o ../data/cluster/bowl/juststars -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/wool+ext.snp > ../data/cluster/bowl/juststars.log 2>&1
 
-/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhall.sdb -o ../data/cluster/bowl/bhall -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhall.log 2>&1&
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhgrow.sdb -o ../data/cluster/bowl/bhgrow -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhgrow.log 2>&1
 
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhgrowl -bgeobase 720 -o ../data/cluster/bowl/bhgrowl -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhgrowl.log 2>&1
+
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhgrow4                                               -orbs 11382,15624,21295,27607,4235,24275,13776,2321,19754,13113,9401,25175,9743,19785 nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhgrow4.log 2>&1
+
+BADORBS=18902,26619,20046,25844,26156,24131,19897,26756,19361,15708,22819
+
+NEWORBS=4645,8807,7348,24862,8126,24306,26762,15201,20508,4340,1766
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhgrow4 -bgeobase 720 -o ../data/cluster/bowl/bhgrow4 -orbs 4645,8807,7348,24862,8126,24306,26762,15201,20508,4340,1766 nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhgrow4.log 2>&1
+/usr/bin/time survey-snap.py -sdbdump ../data/cluster/bowl/juststars4.sdb -o ../data/cluster/bowl/juststars4 -orbs 4645,8807,7348,24862,8126,24306,26762,15201,20508,4340,1766  nemotoy/wool+ext.snp > ../data/cluster/bowl/juststars4.log 2>&1
+
+NEWORBS=20311,5020,9924,1396,3135,15299,28106,27806,19456,6737
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhgrow5 -bgeobase 720 -o ../data/cluster/bowl/bhgrow4 -orbs $NEWORBS nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhgrow5.log 2>&1
+/usr/bin/time survey-snap.py -sdbdump ../data/cluster/bowl/juststars5.sdb -o ../data/cluster/bowl/juststars5 -orbs $NEWORBS  nemotoy/wool+ext.snp > ../data/cluster/bowl/juststars5.log 2>&1
+
+NEWORBS=3198,24435,2337,14159,25425,25323,7126,20442,4821,1200
+/usr/bin/time survey-snap.py -trackbh -sdbdump ../data/cluster/bowl/bhgrow6 -bgeobase 720 -o ../data/cluster/bowl/bhgrow6 -orbs $NEWORBS nemotoy/grow/bhall.snp > ../data/cluster/bowl/bhgrow6.log 2>&1
+/usr/bin/time survey-snap.py -sdbdump ../data/cluster/bowl/juststars6.sdb -o ../data/cluster/bowl/juststars6 -orbs $NEWORBS  nemotoy/wool+ext.snp > ../data/cluster/bowl/juststars6.log 2>&1
+
+
+####
+snaptrim times=45 in=nemotoy/woolext1.snp out=nemotoy/woolext45.snp
+
+makeprobes.py                       ## produces nursery.full.snp
+makeprobes.py nemotoy/woolext45.snp ## produces creche.full.snp
+
+# too many datasteps.   Subsample them.  We may need to reconsider this.
+snaptrim in=creche.full.snp partcyc=4 out=creche.passby.snp >& /tmp/ow
+snaptrim in=nursery.full.snp partcyc=4 out=nursery.passby.snp >& /tmp/ow
+
+###survey-snap.py -orbs 0,1,2,3,4,5,6,7,8 -o ../data/cluster/withbh6-18 nursery.full.snp
+###snap2sdb.py -bgeo creche.passby.snp ../data/cluster/nobh6-18c
+
+survey-snap.py -orbs 2,3,4,5,6,7,8 -trackbh -o $dc/withbh6-18d nursery.passby.snp
+survey-snap.py -orbs 2,3,4,5,6,7,8          -o $dc/nobh6-18d   creche.passby.snp
+
+
+./nemo-make-gold125.sh   # takes about 14 minutes
