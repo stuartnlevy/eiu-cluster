@@ -53,6 +53,10 @@ if len(sys.argv) != ii+1:
 
 nemoin = sys.argv[ii]
 
+if not os.path.exists(nemoin):
+    print(f"{sys.argv[0]}: Can't find input NEMO dataset {nemoin}")
+    sys.exit(1)
+
 cmd = f"snapprint in='{nemoin}' options=x,y,z,i,m,etot header=t"
 
 cmdf = os.popen(cmd, 'r')
