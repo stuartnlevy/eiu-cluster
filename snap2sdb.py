@@ -11,6 +11,7 @@ import sdbio
 as_type = 'sdb'
 every = 1
 rscale = 1
+heart = None
 
 def Usage():
     print(f"""Usage: {sys.argv[0]} [-bgeo|-sdb] [-e everyNth]  nemofile  outstem""")
@@ -23,6 +24,8 @@ while ii<len(sys.argv) and sys.argv[ii][0] == '-':
         as_type = 'bgeo'
     elif opt == '-sdb':
         as_type = 'sdb'
+    elif opt == '-trackbh':
+        heart = -1
     elif opt == '-e':
         every = int( sys.argv[ii] ); ii += 1
     elif opt == '-rscale':
@@ -91,6 +94,9 @@ for stepno, ttime in enumerate(times):
 
     pts = nemor.readtime(ttime)
 
+    if heart is not None:
+        pts[:, 0:3] -= pts[heart, 0:3]
+
     if every > 1:
         pts = pts[::every]
 
@@ -113,7 +119,7 @@ for stepno, ttime in enumerate(times):
         attrnames = ["mass", "lum", "mag"]
 
         attrs = numpy.stack( [ mass, lum, mag ], axis=1 )
-        bg = bgeo.BGeoPolyWriter( outname, points=rscale*pts[:, 0:3], pointattrnames=attrnames, pointattrs=attrs, detailattrnames=["rscale","everyNth","mtotal"], detailattrs=[rscale, every, mass.sum()] )
+        bg = bgeo.BGeoPolyWriter( outname, points=rscale*pts[:, 0:3], pointattrnames=attrnames, pointattrs=attrs, detailattrnames=["rscale","everyNth","mtotal","time"], detailattrs=[rscale, every, mass.sum(), ttime] )
         if stepno == 0:
             r = rscale*numpy.sqrt( numpy.sum( numpy.square( pts[:,0:3] ), axis=1 ) )
             print(f"wrote {len(pts)} points, rmax {r.max():g} rmean {r.mean():g} stddev {r.std():g} mass {mass.min():g} .. {mass.max():g} mean {mass.mean():g} to {outname}")
