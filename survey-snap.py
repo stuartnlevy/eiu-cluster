@@ -16,10 +16,21 @@ sdbout = None
 outbase = 0
 outstem = None
 sdbstem = None
+withsteps = True
 heartid = None
 
 def Usage():
-    print(f"""Usage: {sys.argv[0]}  [-e everyNth] [-orbs id0,id1,...] [-trackbh] [-o out.bgeo] [-bgeoobase outbasenum] nemofile""")
+    print(f"""Usage: {sys.argv[0]} [options ...] nemofile.snp
+Options:
+    -e everyNth
+    -rscale S   (radial scale)
+    -orbs id0,id1,...   assemble orbit curves of those IDs.  Multiple -orbs options OK.
+    -orbsonly           emit only .orbits file, no need to write per-timestep files
+    -trackbh            recenter to keep black hole at origin.   Assumes that BH is the *last* particle.
+    -o outstem         
+    -sdbstem sdbstem
+    -bgeoobase outbasenum""")
+
     sys.exit(1)
 
 ii = 1
@@ -29,6 +40,8 @@ while ii<len(sys.argv) and sys.argv[ii][0] == '-' and len(sys.argv[ii]) > 1:
         every = int( sys.argv[ii] ); ii += 1
     elif opt == '-rscale':
         rscale = float( sys.argv[ii] ); ii += 1
+    elif opt == '-orbsonly':    # this test must precede "if opt.startswith('-orb')"!
+        withsteps = False
     elif opt.startswith('-orb'):
         ss = sys.argv[ii].replace(',',' ').split(); ii += 1
         orbs.extend( [ int(s) for s in ss ] ) 
@@ -36,7 +49,7 @@ while ii<len(sys.argv) and sys.argv[ii][0] == '-' and len(sys.argv[ii]) > 1:
         outstem = sys.argv[ii]; ii += 1
     elif opt == '-bgeobase':
         outbase = int( sys.argv[ii] ); ii += 1
-    elif opt == '-sdbdump':
+    elif opt == '-sdbdump' or opt == '-sdbstem':
         sdbstem = sys.argv[ii]; ii += 1
     elif opt == '-stepmax':
         stepmax = int( sys.argv[ii] ); ii += 1
@@ -57,7 +70,7 @@ if not os.path.exists(nemoin):
     print(f"{sys.argv[0]}: Can't find input NEMO dataset {nemoin}")
     sys.exit(1)
 
-cmd = f"snapprint in='{nemoin}' options=x,y,z,i,m,etot header=t"
+cmd = f"snapprint in='{nemoin}' options=x,y,z,i,m,etot,v header=t"
 
 cmdf = os.popen(cmd, 'r')
 
@@ -76,7 +89,7 @@ while stepno <= stepmax:
         raise ValueError("Expected <nbodies> <timeval> -- what's " + line)
     nbodies, time = int(ss[0]), float(ss[1])
     #print(f"# {nbodies=} {time=}", end="", flush=True)
-    pts = numpy.empty( (nbodies, 3+3) )
+    pts = numpy.empty( (nbodies, 3+4) )
     for i in range(nbodies):
         line = cmdf.readline()
         ss = line.split()
@@ -94,7 +107,7 @@ while stepno <= stepmax:
     #print(f"# {onbodies=}")
 
     r = numpy.sqrt( numpy.sum( numpy.square(pts[:,0:3]), axis=1 ) )
-    ptss.append( pts[:,0:6] )
+    ptss.append( pts[:,0:7] )
     ixx = pts[:, 3]
 
     rr.append( r )
@@ -103,7 +116,7 @@ while stepno <= stepmax:
 
 nsteps = stepno
 
-print(f"# got {nsteps} timesteps ending at {time=:g}")
+print(f"# got {nsteps} timesteps ending at {time=:g} from {nemoin}")
 
 ptss = numpy.array( ptss )
 rr = numpy.array( rr )
@@ -117,25 +130,42 @@ if True:
     mag = -0.921 * numpy.log(lum)
 
 if sdbstem is not None:
+    if sdbstem.endswith('/'):
+        sdbstem += os.path.basename( os.path.dirname(sdbstem) )
     sdbstem = sdbstem.replace('.sdb','')
+
+    os.makedirs( os.path.dirname(sdbstem), exist_ok=True )
+
     sdborbits = f"{sdbstem}.orbits.sdb"
     sdbw = sdbio.SDBWriter( sdborbits )
     timerange = numpy.arange( ptss.shape[0] )
     
-    for seqno in orbs: ## range( ptss.shape[1] ):
+    for iorb, seqno in enumerate(orbs): ## range( ptss.shape[1] ):
         etot = ptss[:,seqno,5]
-        sdbw.writepcles( ptss[:,seqno,0:3], num=seqno, radius=mass[seqno], mag=mag[seqno], opacity=timerange, dxyz=etot[:,None] )
+        v = ptss[:,seqno,6]
+        dxyz = numpy.empty( (len(ptss),3) )
+        dxyz[:,0] = v
+        dxyz[:,1] = v
+        dxyz[:,2] = etot
+        sdbw.writepcles( ptss[:,seqno,0:3], num=seqno, color=iorb, radius=mass[seqno], mag=mag[seqno], opacity=timerange, dxyz=dxyz )
     sdbw.close()
 
     speckf = open(f"{sdbstem}.speck", "w")
     for itime, pts in enumerate(ptss):
         sdbout = f"{sdbstem}.{itime:04d}.sdb"
-        sdbw = sdbio.SDBWriter( sdbout )
-        etot = pts[:, 5]
-        sdbw.writepcles( pts[:, 0:3], num=numpy.arange(0, len(pts)), radius=mass, mag=mag, opacity=itime, dxyz=etot[:,None] )
-        sdbw.close()
-
         print(f"sdb -t {itime} {sdbout}", file=speckf)
+
+        if withsteps:
+            sdbw = sdbio.SDBWriter( sdbout )
+            etot = pts[:, 5]
+            v = pts[:, 6]
+            dxyz = numpy.empty( (len(pts),3) )
+            dxyz[:,0] = v
+            dxyz[:,1] = v
+            dxyz[:,2] = etot
+            sdbw.writepcles( pts[:, 0:3], num=numpy.arange(0, len(pts)), radius=mass, mag=mag, opacity=itime, dxyz=dxyz )
+            sdbw.close()
+
 
 
 rrmins = []
@@ -166,7 +196,10 @@ if outstem is not None:
     if outstem.endswith('/'):
         outstem += os.path.basename( os.path.dirname(outstem) )
 
-    pointattrnames = [ "seqno", "special", "rmin", "rmax", "a", "ecc", "mass", "bigness", "etotmax" ]
+    os.makedirs( os.path.dirname(outstem), exist_ok=True )
+
+
+    pointattrnames = [ "seqno", "special", "rmin", "rmax", "a", "ecc", "mass", "bigness", "etotmax", "speed" ]
     pointattrs = numpy.empty( (onbodies, len(pointattrnames)) )
     pointattrs[:,0] = numpy.arange(onbodies)  # attr0: point index in simulation
     pointattrs[:,1] = 0         # attr1: 0=ordinary point (not a special orbit)
@@ -183,11 +216,14 @@ if outstem is not None:
     pointattrs[:,6] = mass                  # "mass"
     pointattrs[:,7] = (mass ** 0.5) * 0.005 # "bigness".   0.005 is a magic number, convenient for spacing of stars in "wool" cluster.
     pointattrs[:,8] = ptss[:,:,5].max(axis=0) # "etotmax"
+    ##pointattrs[:,9] = ptss[:,:,6]
 
-    for stepno in range(nsteps):
-        outfname = outstem + ".%04d.bgeo" % (stepno+outbase)
+    if withsteps:
+        for stepno in range(nsteps):
+            outfname = outstem + ".%04d.bgeo" % (stepno+outbase)
 
-        _ = bgeo.BGeoPolyWriter( outfname, points=ptss[stepno,:,0:3], pointattrnames=pointattrnames, pointattrs=pointattrs )
+            pointattrs[:,9] = ptss[stepno,:,6]
+            _ = bgeo.BGeoPolyWriter( outfname, points=ptss[stepno,:,0:3], pointattrnames=pointattrnames, pointattrs=pointattrs )
 
 
     outfname = outstem + ".orbits.bgeo"
@@ -197,8 +233,10 @@ if outstem is not None:
     polyattrnames = pointattrnames
     polyattrs = pointattrs[orbs]
 
-    pointattrnames = ["orbframe"]
-    pointattrs = numpy.concatenate( [ outbase+numpy.arange(nsteps) for i in orbs ] ).reshape(-1,1)
+    pointattrnames = ["orbframe", "speed"]
+    orbframes = numpy.concatenate( [ outbase+numpy.arange(nsteps) for i in orbs ] )
+    speeds = numpy.concatenate( [ ptss[:,i,6] for i in orbs ] )
+    pointattrs = numpy.stack( [ orbframes, speeds ], axis=1 )
 
     ## print(f"poly0: [{len(polys[0])}] dxs {[polys[0][1:,0]-polys[0][:-1,0]]}")
     # print("Writing %d curves, %d vertices to %s" % (len(polys), sum([len(pv) for pv in polys]), outfname))
