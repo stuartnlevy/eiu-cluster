@@ -1,3 +1,5 @@
+#! /bin/bash
+
 survey-redcores.py > redcores.dat ; # writes redcores.dat: starno starid n_peri_times  ecc  mindist  maxdist
 
 sort -k +4n redcores.dat  > redcores.sorted.dat  ;# ordered by eccentricity
@@ -128,4 +130,41 @@ survey-snap.py -orbs 2,3,4,5,6,7,8 -trackbh -o $dc/withbh6-18d nursery.passby.sn
 survey-snap.py -orbs 2,3,4,5,6,7,8          -o $dc/nobh6-18d   creche.passby.snp
 
 
-./nemo-make-gold125.sh   # takes about 14 minutes
+./nemo-make-nobh2000.sh   # 2000-timestep cluster with NO BH.   Takes about 14 minutes
+
+snaptrim times=50 in=nemotoy/grow/bhall.snp out=tmp/bh50.snp
+
+snaptrim times=50 in=nemotoy/grow/bhall.snp out=- | snapprint in=- options=i,r,v,etot >/tmp/t50.irve
+snaptrim times=49.95:50 in=creche.passby.snp out=- | snapprint in=- options=i,r,v,etot >/tmp/c50.irve
+
+snaptrim times=49.95:50 in=creche.passby.snp out=tmp/nobh50.snp
+snaptrim times=50 in=nemotoy/grow/bhall.snp out=tmp/bh50.snp 
+
+(snapshell.py -r 0.12,.12 -orbs 4 tmp/bh50.snp; snapshell.py -r 4,.5 -orbs 3 tmp/bh50.snp; snapshell.py -r 10,.5 -orbs 2 tmp/bh50.snp) | tee bh50.shell | grep orbs > bh50.orbs
+(snapshell.py -r 0.12,.12 -orbs 5 tmp/nobh50.snp; snapshell.py -r 4,.5 -orbs 3 tmp/nobh50.snp; snapshell.py -r 10,.5 -orbs 1 tmp/nobh50.snp) | tee nobh50.shell | grep orbs > nobh50.orbs
+
+/usr/bin/time nemo-make-bh2000.sh > nemotoy/bh2000.log 2>&1
+
+survey-snap.py nemotoy/grow/bh2000.snp > nemotoy/grow/bh2000.survey
+awk 'NR<=2 || $8 < 0' nemotoy/grow/bh2000.survey > nemotoy/grow/bh2000.bound.survey
+
+survey-snap.py -o ../data/cluster/nobh7-22 -sdbstem ../data/cluster/nobh7-22/ `cat 7-22/nobh7-22.orbs` nemotoy/gold125.snp
+survey-snap.py -o ../data/cluster/bh7-22/ -sdbstem ../data/cluster/bh7-22/ -trackbh `cat 7-22/bh7-22.orbs` nemotoy/grow/bh7-22.snp
+
+partiview -c 'add sdbvars mcrnx' -c 'add sdb ../data/cluster/bh7-22/bh7-22.orbits.sdb' &
+
+###
+mkdir -p 7-31
+shelltest.py -bh   -orbs 2,1 -N 4 -rr 0.04,3.0  |grep orbs > 7-31/bh7-31.orbs
+shelltest.py -nobh -orbs 2,1 -N 4 -rr 0.04,3.0  |grep orbs > 7-31/nobh7-31.orbs
+
+survey-snap.py -o ../data/cluster/nobh7-31/ -sdbstem ../data/cluster/nobh7-31/ -orbsonly `cat 7-31/nobh7-31.orbs` nemotoy/gold125.snp
+survey-snap.py -o ../data/cluster/bh7-31/ -sdbstem ../data/cluster/bh7-31/ -trackbh -orbsonly `cat 7-31/bh7-31.orbs` nemotoy/grow/bh7-22.snp
+
+
+mkdir -p 8-4
+shelltest.py -bh   -orbs 2,1 -N 4 -rr 0.02,5.0  | tee 8-4/bh8-4.shells   | grep orbs > 8-4/bh8-4.orbs
+shelltest.py -nobh -orbs 2,1 -N 4 -rr 0.02,5.0  | tee 8-4/nobh8-4.shells | grep orbs > 8-4/nobh8-4.orbs
+
+survey-snap.py -o ../data/cluster/nobh8-4/ -sdbstem ../data/cluster/nobh8-4/           `cat 8-4/nobh8-4.orbs` nemotoy/gold8-4_15k_6x.snp
+survey-snap.py -o ../data/cluster/bh8-4/ -sdbstem ../data/cluster/bh8-4/               `cat 8-4/bh8-4.orbs` nemotoy/bh8-4_15k_6x.snp
