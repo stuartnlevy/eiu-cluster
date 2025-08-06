@@ -52,7 +52,7 @@ for i, (rshell, drshell) in enumerate( zip(rshells, drshells) ):
     wanted = (numpy.abs(pts[:,1] - rshell) < drshell) & (pts[:,3] < 0)
     ppts.append( pts[wanted, :] )
 
-print("i    rshell    n    vmin     vmean      vmax     emin    emean    emax")
+print("i    rshell   n    vmin     vmean      vmax     emin    emean    emax")
 for i, (pts, rshell) in enumerate(zip(ppts, rshells)):
     r = pts[:,1]
     vel = pts[:,2]
@@ -65,8 +65,13 @@ for i, (pts, rshell) in enumerate(zip(ppts, rshells)):
 if outorbs is not None:
     for i, pts in enumerate(ppts):
         n = len(pts)
+        if n == 0:
+            continue
+
         iord = numpy.argsort( pts[:,3] )  # ordered by etot total energy.
-        # choose (n-1) tightly bound orbits (probably near circular) (from the bottom quarter centile), plus one most-loosely-bound orbit (
+
+        # with -orbs N,M ==>
+        # choose N tightly bound orbits (probably near circular) (from the bottom quarter centile), plus M loosely-bound orbit
 
         orbis = []
         etots = []
